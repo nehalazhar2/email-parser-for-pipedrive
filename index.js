@@ -2,6 +2,7 @@ require('dotenv').config();
 const Imap = require('imap');
 const { simpleParser } = require('mailparser');
 const { createLead } = require('./createPipedriveLead');
+
 const imapConfig = {
   user: process.env.IMAP_USER,
   password: process.env.IMAP_PASS,
@@ -16,8 +17,8 @@ function startEmailListener() {
 
   imap.once('ready', () => {
     imap.openBox('INBOX', false, () => {
-      console.log('Connected. Waiting for new mail...');
-      readyToFetch = true; // Now safe to fetch only new arrivals
+      console.log('📥 IMAP Connected. Listening for new emails...');
+      readyToFetch = true;
     });
 
     imap.on('mail', () => {
@@ -30,28 +31,43 @@ function startEmailListener() {
         f.on('message', msg => {
           msg.on('body', stream => {
             simpleParser(stream, async (err, parsed) => {
-              if (err) return console.error('Parser error:', err);
+              if (err) return console.error('❌ Parser error:', err);
 
-         let sender = parsed.from.value[0];
-let name = sender.name || '';
-let email = sender.address;
+              const forwarder = parsed.from.value[0].address;
+              const subject = parsed.subject || '';
+              const body = parsed.text || parsed.html || '';
 
-// Check if this is a forwarded message
-const body = parsed.text || parsed.html || '';
-const forwardedMatch = body.match(/From:\s*(.*)\s*<([\w.-]+@[\w.-]+)>/i);
+              // ✅ Detect forwarded message
+              const isForwarded = subject.toLowerCase().startsWith('fwd:') || /forwarded message/i.test(body);
+              if (!isForwarded) {
+                console.log('⏭️ Not a forwarded email. Skipping.');
+                return;
+              }
 
-if (forwardedMatch) {
-  name = forwardedMatch[1].trim();
-  email = forwardedMatch[2].trim();
-  console.log('📩 Forwarded email detected!');
-}
+              // ✅ Try to extract original sender from body
+              const forwardedMatch = body.match(/From:\s*(.*?)\s*<([\w.-]+@[\w.-]+)>/i);
+              const originalName = forwardedMatch ? forwardedMatch[1].trim() : null;
+              const originalEmail = forwardedMatch ? forwardedMatch[2].trim() : null;
 
+              if (!originalEmail) {
+                console.log('⚠️ Could not detect original sender. Skipping.');
+                return;
+              }
 
-              console.log('📬 New Email');
-              console.log('From:', name, `<${email}>`);
-              console.log('Subject:', parsed.subject);
+              console.log('📬 Forwarded Email Detected');
+              console.log('Forwarder:', forwarder);
+              console.log('Original:', originalName, `<${originalEmail}>`);
+              console.log('Subject:', subject);
               console.log('Body Preview:', body.slice(0, 300));
-              await createLead(name, email, body);
+
+              // ✅ Call createLead with both emails
+              await createLead({
+                subject,
+                body,
+                forwarderEmail: forwarder,
+                originalSender: originalEmail,
+                senderName:originalName
+              });
             });
           });
 
@@ -65,12 +81,11 @@ if (forwardedMatch) {
 
   imap.once('error', console.error);
   imap.once('end', () => {
-    console.log('Connection ended. Reconnecting...');
+    console.log('🔁 Connection ended. Reconnecting...');
     setTimeout(startEmailListener, 5000);
   });
 
   imap.connect();
 }
-
 
 startEmailListener();
