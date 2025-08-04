@@ -46,7 +46,8 @@ async function createLead({ subject, body, forwarderEmail, originalSender,sender
     const dealRes = await api.post('/deals', {
       title: `Ticket via email :${senderName}`,
       person_id: personId,
-      user_id: userId || undefined // optional, only include if found
+      user_id: userId || undefined, // optional, only include if found
+      '3a821f8793ad2a7aec4483f021077a3dccee8f43': forwarderEmail 
     });
 
     const dealId = dealRes.data.data.id;
@@ -76,3 +77,4 @@ async function createLead({ subject, body, forwarderEmail, originalSender,sender
 }
 
 module.exports = { createLead };
+
