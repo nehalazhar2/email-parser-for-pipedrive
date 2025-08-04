@@ -38,7 +38,7 @@ function startEmailListener() {
               const body = parsed.text || parsed.html || '';
 
               // ✅ Detect forwarded message
-              const isForwarded = subject.toLowerCase().startsWith('fwd:') || /forwarded message/i.test(body);
+              const isForwarded = subject.toLowerCase().startsWith('fw:') || /forwarded message/i.test(body);
               if (!isForwarded) {
                 console.log('⏭️ Not a forwarded email. Skipping.');
                 return;
@@ -89,3 +89,4 @@ function startEmailListener() {
 }
 
 startEmailListener();
+
