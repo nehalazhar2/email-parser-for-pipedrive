@@ -34,6 +34,7 @@ function startEmailListener() {
               if (err) return console.error('❌ Parser error:', err);
 
               const forwarder = parsed.from.value[0].address;
+ 
               const subject = parsed.subject || '';
               const body = parsed.text || parsed.html || '';
 
@@ -53,7 +54,10 @@ function startEmailListener() {
                 console.log('⚠️ Could not detect original sender. Skipping.');
                 return;
               }
-
+if (originalEmail.toLowerCase().endsWith('@legacie.co.uk')) {
+  console.log(`⏭️ Skipping email from original sender ${originalEmail} (blocked domain)`);
+  return;
+}
               console.log('📬 Forwarded Email Detected');
               console.log('Forwarder:', forwarder);
               console.log('Original:', originalName, `<${originalEmail}>`);
