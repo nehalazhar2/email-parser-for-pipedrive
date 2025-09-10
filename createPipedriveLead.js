@@ -72,7 +72,8 @@ async function createLead({ subject, body, forwarderEmail, originalSender, sende
     console.log('💼 Created deal:', dealId);
 
     // Step 6: Add note
-    const content = `📩 Subject: ${subject || '(No Subject)'}\n\n${body.replace(/\n/g, '  \n') || ''}`;
+      const htmlBody = (body || '').replace(/\n/g, '<br>');
+    const content = `<b>📩 Subject:</b> ${subject || '(No Subject)'}<br><br>${htmlBody}`;
     const MAX = 90000;
     if (content.length <= MAX) {
       await api.post('/notes', { content, deal_id: dealId, person_id: personId });
