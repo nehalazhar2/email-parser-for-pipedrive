@@ -39,11 +39,11 @@ function startEmailListener() {
               const body = parsed.text || parsed.html || '';
 
               // ✅ Detect forwarded message
-              const isForwarded = subject.toLowerCase().startsWith('fw:') || /forwarded message/i.test(body);
-              if (!isForwarded) {
-                console.log('⏭️ Not a forwarded email. Skipping.');
-                return;
-              }
+              // const isForwarded = subject.toLowerCase().startsWith('fw:') || /forwarded message/i.test(body);
+              // if (!isForwarded) {
+              //   console.log('⏭️ Not a forwarded email. Skipping.');
+              //   return;
+              // }
 
               // ✅ Try to extract original sender from body
               const forwardedMatch = body.match(/From:\s*(.*?)\s*<([\w.-]+@[\w.-]+)>/i);
