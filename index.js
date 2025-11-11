@@ -33,34 +33,56 @@ function startEmailListener() {
             simpleParser(stream, async (err, parsed) => {
               if (err) return console.error('❌ Parser error:', err);
 
-              const forwarder = parsed.from.value[0].address;
- 
+              // This is 'MyMailbox@legacie.co.uk' which does the auto-forwarding
+              const forwarder = parsed.from.value[0].address; 
+
               const subject = parsed.subject || '';
               const body = parsed.text || parsed.html || '';
 
-              // ✅ Detect forwarded message
-              // const isForwarded = subject.toLowerCase().startsWith('fw:') || /forwarded message/i.test(body);
-              // if (!isForwarded) {
-              //   console.log('⏭️ Not a forwarded email. Skipping.');
-              //   return;
-              // }
+              // --- Modified Logic Start ---
 
-              // ✅ Try to extract original sender from body
-              const forwardedMatch = body.match(/From:\s*(.*?)\s*<([\w.-]+@[\w.-]+)>/i);
-              const originalName = forwardedMatch ? forwardedMatch[1].trim() : null;
-              const originalEmail = forwardedMatch ? forwardedMatch[2].trim() : null;
+              // ✅ Use matchAll to find *all* "From:" lines in a multi-forwarded email
+              const fromMatches = [...body.matchAll(/From:\s*(.*?)\s*<([\w.-]+@[\w.-]+)>/gi)];
 
-              if (!originalEmail) {
-                console.log('⚠️ Could not detect original sender. Skipping.');
+              if (fromMatches.length === 0) {
+                console.log('⚠️ Could not detect original sender in body. Skipping.');
                 return;
               }
-if (originalEmail.toLowerCase().endsWith('@legacie.co.uk')) {
-  console.log(`⏭️ Skipping email from original sender ${originalEmail} (blocked domain)`);
-  return;
-}
+
+              // ✅ The *last* match is the innermost (true) original sender for Pipedrive
+              const lastMatch = fromMatches[fromMatches.length - 1];
+              const originalName = lastMatch[1].trim();
+              const originalEmail = lastMatch[2].trim();
+
+              // --- New Edge Case Logic ---
+              // Check *all* senders found in the body.
+              // Skip if *any* sender (except our own auto-forwarding mailbox)
+              // is from the blocked domain.
+
+              const blockedDomain = '@legacie.co.uk';
+              // 'forwarder' is our own auto-forwarding mailbox
+              const myMailboxAddressLower = forwarder.toLowerCase();
+
+              // Get all email addresses from all "From:" matches
+              const allEmailsInBody = fromMatches.map(match => match[2].trim().toLowerCase());
+
+              // Check if any email in the body...
+              const hasBlockedSenderInChain = allEmailsInBody.some(email =>
+                // ...ends with the blocked domain
+                email.endsWith(blockedDomain) &&
+                // ...and is NOT our own auto-forwarding mailbox
+                email !== myMailboxAddressLower
+              );
+
+              if (hasBlockedSenderInChain) {
+                console.log(`⏭️ Skipping email: A sender in the forwarding chain (other than ${forwarder}) is from the blocked domain ${blockedDomain}.`);
+                return;
+              }
+              // --- Modified Logic End ---
+
               console.log('📬 Forwarded Email Detected');
-              console.log('Forwarder:', forwarder);
-              console.log('Original:', originalName, `<${originalEmail}>`);
+              console.log('Forwarder (My Mailbox):', forwarder);
+              console.log('Original (Innermost):', originalName, `<${originalEmail}>`);
               console.log('Subject:', subject);
               console.log('Body Preview:', body.slice(0, 300));
 
@@ -70,7 +92,7 @@ if (originalEmail.toLowerCase().endsWith('@legacie.co.uk')) {
                 body,
                 forwarderEmail: forwarder,
                 originalSender: originalEmail,
-                senderName:originalName
+                senderName: originalName
               });
             });
           });
@@ -93,4 +115,3 @@ if (originalEmail.toLowerCase().endsWith('@legacie.co.uk')) {
 }
 
 startEmailListener();
-
