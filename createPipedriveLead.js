@@ -29,22 +29,49 @@ async function createLead({ subject, body, forwarderEmail, originalSender, sende
       console.log('🆕 Created person:', personId);
     }
 
-    // Step 2: Get all deals for this person
-    const existingDealsRes = await api.get('/deals', {
-      params: { person_id: personId }
-    });
-
+    // Step 2: Get deals (search globally, do not restrict by sender)
+    // We'll request a larger page to increase chance of finding a matching "Ticket: <subject>" title.
+    const existingDealsRes = await api.get('/deals', { params: { start: 0, limit: 500 } });
     const existingDeals = existingDealsRes.data.data || [];
 
-    // Step 3: Check if subject already exists
+    // Step 3: Check for exact subject match against deal titles like: "Ticket: Subject (Optional info)"
     const subjectTrimmed = (subject || '').trim().toLowerCase();
-    const duplicateDeal = existingDeals.find(deal =>
-      (deal.title || '').trim().toLowerCase().includes(subjectTrimmed)
-    );
 
-    if (duplicateDeal) {
-      console.log(`🚫 Skipping: Deal with subject "${subject}" already exists.`);
+    // Helper to extract the ticket subject portion from a deal title that begins with "Ticket:"
+    const extractTicketSubject = title => {
+      if (!title) return null;
+      const m = title.match(/^\s*Ticket:\s*(.+?)(?:\s*\(|$)/i);
+      if (m && m[1]) return m[1].trim().toLowerCase();
       return null;
+    };
+
+    // Find a deal whose ticket subject part exactly matches the incoming email subject.
+    const exactSubjectMatch = existingDeals.find(deal => {
+      const ticketSubj = extractTicketSubject(deal.title);
+      return ticketSubj && ticketSubj === subjectTrimmed;
+    });
+
+    if (exactSubjectMatch) {
+      // If we have an exact Ticket: <subject> match, add a note to that deal instead of creating a new one.
+      const dealIdToUpdate = exactSubjectMatch.id;
+      console.log(`♻️ Found existing deal (ID: ${dealIdToUpdate}) with exact subject match. Adding note.`);
+
+      const htmlBody = (body || '').replace(/\n/g, '<br>');
+      const content = `<b>📩 Subject:</b> ${subject || '(No Subject)'}<br><br>${htmlBody}`;
+      const MAX = 90000;
+      if (content.length <= MAX) {
+        await api.post('/notes', { content, deal_id: dealIdToUpdate, person_id: personId });
+      } else {
+        const parts = [];
+        for (let i = 0; i < content.length; i += MAX) {
+          parts.push(content.slice(i, i + MAX));
+        }
+        for (const chunk of parts) {
+          await api.post('/notes', { content: chunk, deal_id: dealIdToUpdate, person_id: personId });
+        }
+      }
+
+      return { personId, dealId: dealIdToUpdate };
     }
 
     // Step 4: Match forwarder email to user
